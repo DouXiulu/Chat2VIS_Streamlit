@@ -4,14 +4,31 @@
 # Paula Maddigan
 #################################################################################
 
-import openai
+import os
+from openai import OpenAI
 from langchain_community.llms import HuggingFaceHub
 from langchain.chains import LLMChain
 from langchain_core.prompts import PromptTemplate
 
 def run_request(question_to_ask, model_type, key, alt_key):
     # 根据模型类型调用不同的 API 获取 Python 代码脚本
-    if model_type == "gpt-4" or model_type == "gpt-3.5-turbo" :
+    if model_type == "deepseek-chat":
+        # 调用 DeepSeek API
+        client = OpenAI(
+            api_key=key,
+            base_url="https://api.deepseek.com"
+        )
+        task = "Generate Python Code Script. The script should only include code, no comments."
+        response = client.chat.completions.create(
+            model=model_type,
+            messages=[
+                {"role": "system", "content": task},
+                {"role": "user", "content": question_to_ask}
+            ],
+            stream=False
+        )
+        llm_response = response.choices[0].message.content
+    elif model_type == "gpt-4" or model_type == "gpt-3.5-turbo" :
         # 调用 OpenAI ChatCompletion API
         task = "Generate Python Code Script."
         if model_type == "gpt-4":
@@ -25,7 +42,7 @@ def run_request(question_to_ask, model_type, key, alt_key):
         # 调用 OpenAI Completion API
         openai.api_key = key
         response = openai.Completion.create(engine=model_type,prompt=question_to_ask,temperature=0,max_tokens=500,
-                    top_p=1.0,frequency_penalty=0.0,presence_penalty=0.0,stop=["plt.show()"])
+                    top_p=1.0,frequency_penalty=0.0,presence_penalty=0.0,stop=["st.pyplot(fig)"])
         llm_response = response["choices"][0]["text"] 
     else:
         # 调用 Hugging Face 模型
@@ -60,9 +77,6 @@ def format_response(res):
 def format_question(primer_desc, primer_code, question, model_type):
     # 填充模型特定的指令
     instructions = ""
-    if model_type == "Code Llama":
-        # Code Llama 在绘制散点图时容易误用 'c' 参数
-        instructions = "\n绘图时不要使用 'c' 参数，请使用 'color'，且只传递如 'green'、'red'、'blue' 这样的颜色名称。"
     primer_desc = primer_desc.format(instructions)
     # 将问题放在描述 primer 的结尾，并加上代码 primer
     return '"""\n' + primer_desc + question + '\n"""\n' + primer_code
@@ -82,7 +96,7 @@ def get_primer(df_dataset, df_name):
     primer_desc = primer_desc + "\n请合理标注 x 和 y 轴。"
     primer_desc = primer_desc + "\n添加标题，fig suptitle 设为空。"
     primer_desc = primer_desc + "{}" # 预留补充指令
-    primer_desc = primer_desc + "\n请使用 Python 3.9.12，基于 dataframe df 编写绘图脚本："
+    primer_desc = primer_desc + "\n请使用 Python 3.11.13，基于 dataframe df 编写绘图脚本："
     pimer_code = "import pandas as pd\nimport matplotlib.pyplot as plt\n"
     pimer_code = pimer_code + "fig,ax = plt.subplots(1,1,figsize=(10,4))\n"
     pimer_code = pimer_code + "ax.spines['top'].set_visible(False)\nax.spines['right'].set_visible(False) \n"

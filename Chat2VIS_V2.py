@@ -5,10 +5,11 @@
 #################################################################################
 
 import pandas as pd
-import openai
+import os
+from openai import OpenAI
 import streamlit as st
 #import streamlit_nested_layout
-from classes import get_primer,format_question,run_request
+from classes_v2 import get_primer,format_question,run_request
 import warnings
 warnings.filterwarnings("ignore")
 # st.set_option('deprecation.showPyplotGlobalUse', False)  # 此选项在新版本中已弃用
@@ -18,13 +19,12 @@ st.set_page_config(page_icon="chat2vis.png",layout="wide",page_title="Chat2VIS")
 st.markdown("<h1 style='text-align: center; font-weight:bold; font-family:comic sans ms; padding-top: 0rem;'> \
             Chat2VIS</h1>", unsafe_allow_html=True)
 st.markdown("<h2 style='text-align: center;padding-top: 0rem;'>Creating Visualisations using Natural Language \
-            with ChatGPT and Code Llama</h2>", unsafe_allow_html=True)
+            with DeepSeek</h2>", unsafe_allow_html=True)
 
 st.sidebar.markdown('</a> Developed by Paula Maddigan <a style="text-align: center;padding-top: 0rem;" href="mailto: i.build.apps.4.u@gmail.com">:email:', unsafe_allow_html=True)
 
 
-available_models = {"ChatGPT-4": "gpt-4","ChatGPT-3.5": "gpt-3.5-turbo","GPT-3": "text-davinci-003",
-                        "GPT-3.5 Instruct": "gpt-3.5-turbo-instruct","Code Llama":"CodeLlama-34b-Instruct-hf"}
+available_models = {"DeepSeek-Chat": "deepseek-chat"}
 
 ## 用于保存数据集的列表
 if "datasets" not in st.session_state:
@@ -43,8 +43,8 @@ else:
     datasets = st.session_state["datasets"]
 
 key_col1,key_col2 = st.columns(2)
-openai_key = key_col1.text_input(label = ":key: OpenAI Key:", help="Required for ChatGPT-4, ChatGPT-3.5, GPT-3, GPT-3.5 Instruct.",type="password")
-hf_key = key_col2.text_input(label = ":hugging_face: HuggingFace Key:",help="Required for Code Llama", type="password")
+deepseek_key = key_col1.text_input(label = ":key: DeepSeek API Key:", help="Required for DeepSeek-Chat.",type="password")
+key_col2.empty()  # 保留布局但不再使用HuggingFace Key
 
 with st.sidebar:
     # 首先选择数据集，加载后填充选项
@@ -74,7 +74,6 @@ with st.sidebar:
         label = f"{model_desc} ({model_name})"
         key = f"key_{model_desc}"
         use_model[model_desc] = st.checkbox(label, value=True, key=key)
-    st.info("注意：Code Llama 模型升级导致绘图失败，正在修复中...")
  
 ## 可视化问题输入框
 question = st.text_area(":eyes: 你想可视化什么内容？", height=10)
@@ -88,13 +87,9 @@ model_count = len(selected_models)
 if go_btn and model_count > 0:
     api_keys_entered = True
     # 检查 API 密钥是否输入
-    if "ChatGPT-4" in selected_models or "ChatGPT-3.5" in selected_models or "GPT-3" in selected_models or "GPT-3.5 Instruct" in selected_models:
-        if not openai_key.startswith('sk-'):
-            st.error("请输入有效的 OpenAI API 密钥。")
-            api_keys_entered = False
-    if "Code Llama" in selected_models:
-        if not hf_key.startswith('hf_'):
-            st.error("请输入有效的 HuggingFace API 密钥。")
+    if "DeepSeek-Chat" in selected_models:
+        if not deepseek_key:
+            st.error("请输入有效的 DeepSeek API 密钥。")
             api_keys_entered = False
     if api_keys_entered:
         # 根据模型数量创建绘图区
@@ -110,7 +105,7 @@ if go_btn and model_count > 0:
                     question_to_ask = format_question(primer1, primer2, question, model_type)
                     # 执行请求
                     answer = ""
-                    answer = run_request(question_to_ask, available_models[model_type], key=openai_key, alt_key=hf_key)
+                    answer = run_request(question_to_ask, available_models[model_type], key=deepseek_key, alt_key="")
                     # answer 为完整 Python 脚本，需加 primer2 头部
                     answer = primer2 + answer
                     print("模型: " + model_type)
@@ -118,22 +113,7 @@ if go_btn and model_count > 0:
                     plot_area = st.empty()
                     plot_area.pyplot(exec(answer))
                 except Exception as e:
-                    if type(e) == openai.error.APIError:
-                        st.error("OpenAI API 错误，请稍后重试。(" + str(e) + ")")
-                    elif type(e) == openai.error.Timeout:
-                        st.error("OpenAI API 超时，请稍后重试。(" + str(e) + ")")
-                    elif type(e) == openai.error.RateLimitError:
-                        st.error("OpenAI API 超出速率限制。(" + str(e) + ")")
-                    elif type(e) == openai.error.APIConnectionError:
-                        st.error("OpenAI API 连接失败，请检查网络/代理/防火墙设置。(" + str(e) + ")")
-                    elif type(e) == openai.error.InvalidRequestError:
-                        st.error("OpenAI API 请求无效或缺少参数。(" + str(e) + ")")
-                    elif type(e) == openai.error.AuthenticationError:
-                        st.error("请输入有效的 OpenAI API 密钥。(" + str(e) + ")")
-                    elif type(e) == openai.error.ServiceUnavailableError:
-                        st.error("OpenAI 服务暂不可用，请稍后重试。(" + str(e) + ")")
-                    else:
-                        st.error("模型生成的代码有误，无法执行。")
+                    st.error("模型生成的代码有误，无法执行。(" + str(e) + ")")
 
 ## 以标签页形式展示所有数据集
 tab_list = st.tabs(datasets.keys())
